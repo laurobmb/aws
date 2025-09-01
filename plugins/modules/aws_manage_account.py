@@ -2,7 +2,8 @@
 
 from ansible.module_utils.basic import AnsibleModule
 import boto3
-import json
+import time # CORREÇÃO: Importar o módulo time
+from botocore.exceptions import ClientError
 
 
 DOCUMENTATION = r'''
@@ -47,8 +48,8 @@ EXAMPLES = r'''
 - name: Criar nova conta AWS
   aws_organizations_account:
     action: create_account
-    email: "nova.conta@example.com"
-    projeto: "ProjetoDemo"
+    email: "nova.conta+ansible@example.com"
+    projeto: "ProjetoAnsible"
 
 - name: Mover conta para OU
   aws_organizations_account:
@@ -77,62 +78,81 @@ response:
 '''
 
 
-def get_root_id():
-    client = boto3.client('organizations')
-    roots = client.list_roots()
-    root_id = roots['Roots'][0]['Id']
-    return root_id
+def get_current_parent_id(client, account_id):
+    """Descobre o Parent ID (Root ou OU) atual de uma conta."""
+    parents = client.list_parents(ChildId=account_id)
+    return parents['Parents'][0]['Id']
 
 
-def move_account(account_id, destination_ou_id):
-    client = boto3.client('organizations')
+def move_account(client, account_id, destination_ou_id):
+    """Move uma conta para uma nova OU."""
     try:
+        # CORREÇÃO: Descobrir o pai de origem dinamicamente
+        source_parent_id = get_current_parent_id(client, account_id)
+        
+        # Não fazer nada se já estiver no destino
+        if source_parent_id == destination_ou_id:
+            return dict(
+                changed=False,
+                msg=f"Conta {account_id} já está na OU de destino {destination_ou_id}."
+            )
+
         response = client.move_account(
             AccountId=account_id,
-            SourceParentId=get_root_id(),
+            SourceParentId=source_parent_id,
             DestinationParentId=destination_ou_id
         )
         return dict(
             changed=True,
-            msg=f"Conta {account_id} movida para OU {destination_ou_id}",
+            msg=f"Conta {account_id} movida de {source_parent_id} para {destination_ou_id}.",
             response=response
         )
-    except Exception as e:
+    except ClientError as e:
         return dict(
             failed=True,
-            msg=f"Erro ao mover conta: {str(e)}"
+            msg=f"Erro ao mover conta: {e.response['Error']['Message']}"
         )
 
 
-def create_account(email, projeto):
-    client = boto3.client('organizations')
+def create_account(client, email, projeto):
+    """Cria uma nova conta na AWS Organization e aguarda sua conclusão."""
     try:
         response = client.create_account(
             Email=email,
             AccountName=projeto,
             IamUserAccessToBilling='ALLOW'
         )
+
         request_id = response['CreateAccountStatus']['Id']
 
-        waiter = client.get_waiter('account_created')
-        waiter.wait(
-            CreateAccountRequestId=request_id,
-            WaiterConfig={'Delay': 20, 'MaxAttempts': 30}
-        )
+        while True:
+            status_response = client.describe_create_account_status(
+                CreateAccountRequestId=request_id
+            )
+            status = status_response['CreateAccountStatus']
+            state = status['State']
 
-        status = client.describe_create_account_status(
-            CreateAccountRequestId=request_id
-        )['CreateAccountStatus']
+            if state == 'SUCCEEDED':
+                # CORREÇÃO: Retornar um dicionário Python formatado para o Ansible
+                return dict(
+                    changed=True,
+                    msg=f"Conta {status['AccountId']} criada com sucesso para o projeto {projeto}.",
+                    status=status
+                )
 
-        return dict(
-            changed=True,
-            msg="Conta criada com sucesso",
-            status=status
-        )
-    except Exception as e:
+            if state == 'FAILED':
+                # CORREÇÃO: Retornar um dicionário de falha
+                return dict(
+                    failed=True,
+                    msg=f"Criação da conta falhou. Motivo: {status.get('FailureReason', 'Não especificado')}"
+                )
+            
+            time.sleep(15) # Pausa antes da próxima verificação
+
+    except ClientError as e:
         return dict(
             failed=True,
-            msg=f"Erro ao criar conta: {str(e)}"
+            msg=f"Erro de API da AWS ao criar conta: {e.response['Error']['Message']}"
         )
 
 
@@ -145,29 +165,32 @@ def run_module():
         destination_ou_id=dict(type='str', required=False),
     )
 
-    result = dict(
-        changed=False,
-        msg='',
-        status={}
-    )
-
     module = AnsibleModule(
         argument_spec=module_args,
-        supports_check_mode=False
+        supports_check_mode=False # Este módulo faz alterações reais, então check_mode não é suportado
     )
 
     action = module.params['action']
+    result = {}
+
+    # MELHORIA: Criar o cliente uma vez e passá-lo como parâmetro
+    try:
+        client = boto3.client('organizations')
+    except Exception as e:
+        module.fail_json(msg=f"Falha ao iniciar cliente boto3: {str(e)}")
+
 
     if action == 'create_account':
         if not module.params['email'] or not module.params['projeto']:
-            module.fail_json(msg="Parâmetros 'email' e 'projeto' são obrigatórios para create_account")
-        result = create_account(module.params['email'], module.params['projeto'])
+            module.fail_json(msg="Parâmetros 'email' e 'projeto' são obrigatórios para create_account.")
+        result = create_account(client, module.params['email'], module.params['projeto'])
 
     elif action == 'move_account':
         if not module.params['account_id'] or not module.params['destination_ou_id']:
-            module.fail_json(msg="Parâmetros 'account_id' e 'destination_ou_id' são obrigatórios para move_account")
-        result = move_account(module.params['account_id'], module.params['destination_ou_id'])
+            module.fail_json(msg="Parâmetros 'account_id' e 'destination_ou_id' são obrigatórios para move_account.")
+        result = move_account(client, module.params['account_id'], module.params['destination_ou_id'])
 
+    # Lógica de saída final
     if result.get("failed"):
         module.fail_json(**result)
     else:

@@ -1,15 +1,26 @@
 ---
 - name: AWS Account Management
   hosts: localhost
+  connection: local
+  gather_facts: no # Não precisa coletar fatos para este tipo de tarefa
+
   tasks:
     - name: Criar nova conta AWS
-      laurobmb.aws_manage_account:
+      # Supondo que o módulo está na coleção laurobmb.aws e se chama aws_organizations_account
+      laurobmb.aws.aws_manage_account:
         action: create_account
-        email: "nova.conta@example.com"
-        projeto: "ProjetoDemo"
+        email: "lauroinf+demo3@hotmail.com" # É bom usar um e-mail único por conta
+        projeto: "ProjetoDemo3"
+      register: create_account_result
 
-    - name: Mover conta para OU
-      laurobmb.aws_manage_account:
+    - name: Mostrar o resultado completo da criação
+      ansible.builtin.debug:
+        var: create_account_result
+
+    - name: Mover a conta recém-criada para a OU de destino
+      laurobmb.aws.aws_manage_account:
         action: move_account
-        account_id: "123456789012"
-        destination_ou_id: "ou-xxxx-yyyy"
+        # CORREÇÃO AQUI: Acessando o AccountId dentro da chave 'status'
+        account_id: "{{ create_account_result.status.AccountId }}"
+        destination_ou_id: "ou-jojo-zeg98nd3" # Coloque o ID da sua OU aqui
+      when: create_account_result.changed # Só executa se a conta foi realmente criada
