@@ -45,17 +45,25 @@ author:
 '''
 
 EXAMPLES = r'''
-- name: Criar nova conta AWS
-  aws_organizations_account:
-    action: create_account
-    email: "nova.conta+ansible@example.com"
-    projeto: "ProjetoAnsible"
 
-- name: Mover conta para OU
-  aws_organizations_account:
+- name: Criar nova conta AWS
+    laurobmb.aws.aws_manage_account:
+    action: create_account
+    email: "laurobmb+demo3@hotmail.com"
+    projeto: "ProjetoDemo3"
+    register: create_account_result
+
+- name: Mostrar o resultado completo da criação
+    ansible.builtin.debug:
+    var: create_account_result
+
+- name: Mover a conta recém-criada para a OU de destino
+    laurobmb.aws.aws_manage_account:
     action: move_account
-    account_id: "123456789012"
-    destination_ou_id: "ou-xxxx-yyyy"
+    account_id: "{{ create_account_result.status.AccountId }}"
+    destination_ou_id: "ou-jojo-zeg98nd3"
+    when: create_account_result.changed
+
 '''
 
 RETURN = r'''
