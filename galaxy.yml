@@ -10,14 +10,12 @@ license:
 license_file: ''
 tags: []
 dependencies: {}
-repository: https://github.com/laurobmb/ansible_statusinvest_collection
-documentation: https://github.com/laurobmb/ansible_statusinvest_collection/docs/
+repository: https://github.com/laurobmb/aws
+documentation: https://github.com/laurobmb/aws/docs/
 homepage: https://github.com/laurobmb
-issues: https://github.com/laurobmb/ansible_statusinvest_collection/issues
+issues: https://github.com/laurobmb/aws/issues
 build_ignore:
 - '*.pyc'
 - galaxy.yml
 - playbooks/sensitive
 - '*.tar.gz'
-- plugins/modules/module_statusinvest_acoes.py
-- plugins/modules/module_statusinvest_fundos.py
