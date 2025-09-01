@@ -11,7 +11,7 @@ license_file: ''
 tags: []
 dependencies: {}
 repository: https://github.com/laurobmb/aws
-documentation: https://github.com/laurobmb/aws/docs/
+documentation: https://github.com/laurobmb/aws/tree/main/docs
 homepage: https://github.com/laurobmb
 issues: https://github.com/laurobmb/aws/issues
 build_ignore:
