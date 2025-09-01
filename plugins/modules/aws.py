@@ -5,6 +5,78 @@ import boto3
 import json
 
 
+DOCUMENTATION = r'''
+---
+module: aws_organizations_account
+short_description: Cria ou move contas AWS dentro de uma Organization
+version_added: "1.0"
+description:
+  - "Módulo para criar contas AWS em uma Organization e mover contas existentes para Organizational Units (OUs)."
+options:
+    action:
+        description:
+          - Ação a ser executada: criar ou mover uma conta.
+        required: true
+        type: str
+        choices: ['create_account', 'move_account']
+    email:
+        description:
+          - Email da conta a ser criada. Obrigatório para create_account.
+        required: false
+        type: str
+    projeto:
+        description:
+          - Nome do projeto / nome da conta a ser criada. Obrigatório para create_account.
+        required: false
+        type: str
+    account_id:
+        description:
+          - ID da conta a ser movida. Obrigatório para move_account.
+        required: false
+        type: str
+    destination_ou_id:
+        description:
+          - ID da OU de destino. Obrigatório para move_account.
+        required: false
+        type: str
+author:
+    - Lauro Gomes (@laurobmb)
+'''
+
+EXAMPLES = r'''
+- name: Criar nova conta AWS
+  aws_organizations_account:
+    action: create_account
+    email: "nova.conta@example.com"
+    projeto: "ProjetoDemo"
+
+- name: Mover conta para OU
+  aws_organizations_account:
+    action: move_account
+    account_id: "123456789012"
+    destination_ou_id: "ou-xxxx-yyyy"
+'''
+
+RETURN = r'''
+msg:
+    description: Mensagem resumida da ação executada
+    type: str
+    returned: always
+changed:
+    description: Indica se houve alteração no ambiente
+    type: bool
+    returned: always
+status:
+    description: Status detalhado da criação da conta (apenas para create_account)
+    type: dict
+    returned: when action is create_account
+response:
+    description: Resposta da API AWS (apenas para move_account)
+    type: dict
+    returned: when action is move_account
+'''
+
+
 def get_root_id():
     client = boto3.client('organizations')
     roots = client.list_roots()
@@ -105,79 +177,6 @@ def run_module():
 def main():
     run_module()
 
-# Documentação do módulo
-DOCUMENTATION = r'''
----
-module: aws_organizations_account
-short_description: Cria ou move contas AWS dentro de uma Organization
-version_added: "1.0"
-description:
-  - "Módulo para criar contas AWS em uma Organization e mover contas existentes para Organizational Units (OUs)."
-options:
-    action:
-        description:
-          - Ação a ser executada: criar ou mover uma conta.
-        required: true
-        type: str
-        choices: ['create_account', 'move_account']
-    email:
-        description:
-          - Email da conta a ser criada. Obrigatório para create_account.
-        required: false
-        type: str
-    projeto:
-        description:
-          - Nome do projeto / nome da conta a ser criada. Obrigatório para create_account.
-        required: false
-        type: str
-    account_id:
-        description:
-          - ID da conta a ser movida. Obrigatório para move_account.
-        required: false
-        type: str
-    destination_ou_id:
-        description:
-          - ID da OU de destino. Obrigatório para move_account.
-        required: false
-        type: str
-author:
-    - Lauro Gomes (@laurobmb)
-'''
-
-EXAMPLES = r'''
-# Criar nova conta
-- name: Criar nova conta AWS
-  aws_organizations_account:
-    action: create_account
-    email: "nova.conta@example.com"
-    projeto: "ProjetoDemo"
-
-# Mover conta para uma OU específica
-- name: Mover conta para OU
-  aws_organizations_account:
-    action: move_account
-    account_id: "123456789012"
-    destination_ou_id: "ou-xxxx-yyyy"
-'''
-
-RETURN = r'''
-msg:
-    description: Mensagem resumida da ação executada
-    type: str
-    returned: always
-changed:
-    description: Indica se houve alteração no ambiente
-    type: bool
-    returned: always
-status:
-    description: Status detalhado da criação da conta (apenas para create_account)
-    type: dict
-    returned: when action is create_account
-response:
-    description: Resposta da API AWS (apenas para move_account)
-    type: dict
-    returned: when action is move_account
-'''
 
 if __name__ == '__main__':
     main()
