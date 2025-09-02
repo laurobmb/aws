@@ -1,93 +1,96 @@
-# Módulo Python: Lógica para AWS Organizations
+# Python Module: AWS Organizations Logic
 
-Este script Python contém funções para interagir com a API do AWS Organizations. Ele foi projetado primariamente para ser usado como um módulo Ansible customizado, mas sua lógica principal é autocontida e pode ser utilizada em outros contextos de automação com Python.
+This Python script contains functions to interact with the AWS Organizations API. It is designed primarily for use as a custom Ansible module, but its core logic is self-contained and can be used in other Python-based automation contexts.
 
-O script automatiza a criação e a movimentação de contas AWS, tratando operações assíncronas e garantindo que as ações sejam executadas de forma robusta.
+The script automates the creation and movement of AWS accounts, handling asynchronous operations and ensuring that actions are executed robustly.
 
----
+-----
 
-## Funcionalidades Principais
+## Key Features
 
--   **Criação de Contas**: Inicia o processo de criação de uma nova conta AWS e utiliza um sistema de *polling* para aguardar sua conclusão.
--   **Movimentação de Contas**: Move uma conta existente de sua localização atual (seja o Root da organização ou outra OU) para uma Organizational Unit (OU) de destino.
+  - **Account Creation**: Initiates the creation process for a new AWS account and uses a polling system to await its completion, with optional support for custom IAM role names and resource tags.
+  - **Account Moving**: Moves an existing account from its current location (either the organization's Root or another OU) to a destination Organizational Unit (OU).
 
----
+-----
 
-## Requisitos
+## Requirements
 
--   **Python 3.7+**
--   **Boto3**: A biblioteca oficial da AWS para Python.
+  - **Python 3.7+**
+  - **Boto3**: The official AWS SDK for Python.
 
-Para instalar a dependência necessária, execute:
+To install the necessary dependency, run:
+
 ```bash
 pip install boto3
-````
+```
 
 -----
 
-## Configuração de Credenciais AWS
+## AWS Credential Setup
 
-O script utiliza o Boto3, que buscará por credenciais AWS automaticamente na seguinte ordem:
+The script uses Boto3, which will automatically search for AWS credentials in the following order:
 
-1.  Variáveis de ambiente (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, etc.).
-2.  Arquivo de credenciais compartilhadas (`~/.aws/credentials`).
-3.  Roles IAM (quando executado em um ambiente AWS, como EC2, Lambda, etc.).
+1.  Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, etc.).
+2.  The shared credentials file (`~/.aws/credentials`).
+3.  IAM roles (when running in an AWS environment like EC2, Lambda, etc.).
 
 -----
 
-## Funções Principais
+## Main Functions
 
-O script expõe as seguintes funções para interação com a API:
+The script exposes the following functions for API interaction:
 
-### `create_account(client, email, projeto)`
+### `create_account(client, email, projeto, role_name=None, tags=None)`
 
-Cria uma nova conta na AWS Organization e aguarda sua conclusão.
+Creates a new account in the AWS Organization and waits for its completion.
 
-  - **Parâmetros:**
+  - **Parameters:**
 
-      - `client` (`boto3.client`): Uma instância pré-configurada do cliente `boto3.client('organizations')`.
-      - `email` (`str`): O endereço de e-mail para a nova conta. Deve ser único.
-      - `projeto` (`str`): O nome que será atribuído à nova conta.
+      - `client` (`boto3.client`): A pre-configured instance of the `boto3.client('organizations')`.
+      - `email` (`str`): The email address for the new account. Must be unique.
+      - `projeto` (`str`): The name to be assigned to the new account.
+      - `role_name` (`str`, optional): The name of the IAM role to create in the new account. Defaults to the AWS standard if not provided.
+      - `tags` (`list`, optional): A list of dictionaries for tagging the account. Format: `[{'Key': 'TagName', 'Value': 'TagValue'}]`.
 
-  - **Retorno:**
+  - **Return:**
 
-      - Um `dict` Python contendo o status final da operação. Em caso de sucesso, o dicionário inclui uma chave `status` com os detalhes da conta criada. Em caso de falha, inclui as chaves `failed: True` e `msg` com o motivo do erro.
+      - A Python `dict` containing the final status of the operation. On success, the dictionary includes a `status` key with details of the created account. On failure, it includes `failed: True` and a `msg` with the reason for the error.
 
-    *Exemplo de retorno de sucesso:*
+    *Example of a successful return:*
 
     ```python
     {
         'changed': True,
-        'msg': 'Conta 123456789012 criada com sucesso...',
+        'msg': 'Account 123456789012 successfully created...',
         'status': {
             'AccountId': '123456789012',
-            'AccountName': 'ProjetoDemo',
+            'AccountName': 'ProjectDemo',
             'State': 'SUCCEEDED',
-            # ... outros campos
+            # ... other fields
         }
     }
     ```
 
 ### `move_account(client, account_id, destination_ou_id)`
 
-Move uma conta AWS existente para uma nova Organizational Unit.
+Moves an existing AWS account to a new Organizational Unit.
 
-  - **Parâmetros:**
+  - **Parameters:**
 
-      - `client` (`boto3.client`): Uma instância do cliente `boto3.client('organizations')`.
-      - `account_id` (`str`): O ID da conta de 12 dígitos a ser movida.
-      - `destination_ou_id` (`str`): O ID da OU de destino (ex: `ou-xxxx-yyyyyyyy`).
+      - `client` (`boto3.client`): An instance of the `boto3.client('organizations')`.
+      - `account_id` (`str`): The 12-digit ID of the account to be moved.
+      - `destination_ou_id` (`str`): The ID of the destination OU (e.g., `ou-xxxx-yyyyyyyy`).
 
-  - **Retorno:**
+  - **Return:**
 
-      - Um `dict` Python com o resultado. A chave `changed` será `True` se a conta foi movida ou `False` se já estava no destino. Em caso de sucesso, a chave `response` contém a resposta da API da AWS.
+      - A Python `dict` with the result. The `changed` key will be `True` if the account was moved or `False` if it was already at the destination. On success, the `response` key contains the AWS API response.
 
-    *Exemplo de retorno de sucesso:*
+    *Example of a successful return:*
 
     ```python
     {
         'changed': True,
-        'msg': 'Conta 123456789012 movida de r-abcd para ou-xxxx-yyyyyyyy.',
+        'msg': 'Account 123456789012 moved from r-abcd to ou-xxxx-yyyyyyyy.',
         'response': {
             'ResponseMetadata': {
                 'RequestId': 'a1b2c3d4-example',
@@ -99,50 +102,57 @@ Move uma conta AWS existente para uma nova Organizational Unit.
 
 -----
 
-## Exemplo de Uso (Standalone)
+## Standalone Usage Example
 
-Para testar as funções diretamente com Python, você pode adicionar um bloco de execução ao final do script:
+To test the functions directly with Python, you can add an execution block at the end of the script:
 
 ```python
-# No final do arquivo aws_organizations_account.py
+# At the end of the aws_organizations_account.py file
 
 if __name__ == '__main__':
-    # É necessário ter as credenciais AWS configuradas no ambiente
+    # AWS credentials must be configured in the environment
     try:
         org_client = boto3.client('organizations')
 
-        # --- Teste de Criação de Conta ---
-        print("--- Iniciando teste de criação de conta ---")
-        email_teste = "seu-email+teste-standalone@example.com"
-        projeto_teste = "ProjetoStandalone"
-        resultado_criacao = create_account(org_client, email_teste, projeto_teste)
+        # --- Test Account Creation ---
+        print("--- Starting account creation test ---")
+        test_email = "your-email+test-standalone@example.com"
+        test_project = "ProjectStandalone"
+        test_role = "CustomStandaloneRole"
+        test_tags = [{'Key': 'ManagedBy', 'Value': 'PythonScript'}]
         
-        print("Resultado da Criação:")
-        # O resultado já é um dicionário, não precisa de json.loads
+        creation_result = create_account(
+            org_client,
+            test_email,
+            test_project,
+            role_name=test_role,
+            tags=test_tags
+        )
+        
+        print("Creation Result:")
         import json
-        print(json.dumps(resultado_criacao, indent=4))
+        print(json.dumps(creation_result, indent=4, default=str))
 
-        # --- Teste de Movimentação de Conta ---
-        if not resultado_criacao.get('failed'):
-            account_id_criado = resultado_criacao['status']['AccountId']
-            ou_destino_id = "ou-xxxx-yyyyyyyy" # SUBSTITUA PELO ID DA SUA OU
+        # --- Test Account Move ---
+        if not creation_result.get('failed'):
+            created_account_id = creation_result['status']['AccountId']
+            dest_ou_id = "ou-xxxx-yyyyyyyy" # REPLACE WITH YOUR OU ID
             
-            print(f"\n--- Iniciando teste de movimentação da conta {account_id_criado} ---")
-            resultado_mov = move_account(org_client, account_id_criado, ou_destino_id)
+            print(f"\n--- Starting move test for account {created_account_id} ---")
+            move_result = move_account(org_client, created_account_id, dest_ou_id)
             
-            print("Resultado da Movimentação:")
-            print(json.dumps(resultado_mov, indent=4, default=str))
+            print("Move Result:")
+            print(json.dumps(move_result, indent=4, default=str))
 
     except Exception as e:
-        print(f"Ocorreu um erro: {e}")
-
+        print(f"An error occurred: {e}")
 ```
 
 -----
 
-## Permissões IAM Necessárias
+## Required IAM Permissions
 
-A entidade IAM que executa este script precisa das seguintes permissões na AWS:
+The IAM entity executing this script needs the following AWS permissions:
 
 ```json
 {
@@ -155,7 +165,7 @@ A entidade IAM que executa este script precisa das seguintes permissões na AWS:
                 "organizations:DescribeCreateAccountStatus",
                 "organizations:MoveAccount",
                 "organizations:ListParents",
-                "organizations:ListRoots"
+                "organizations:TagResource"
             ],
             "Resource": "*"
         }
@@ -165,10 +175,10 @@ A entidade IAM que executa este script precisa das seguintes permissões na AWS:
 
 -----
 
-## Autor
+## Author
 
   - Lauro Gomes ([@laurobmb](https://github.com/laurobmb))
 
-## Licença
+## License
 
-MIT
+GPL-3.0-or-later

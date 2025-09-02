@@ -1,6 +1,6 @@
 namespace: laurobmb
 name: aws
-version: 1.0.7
+version: 1.0.9
 readme: README.md
 authors:
 - Lauro Gomes <lagomes@redhat.com>

@@ -1,33 +1,33 @@
-# Módulo Ansible: aws_organizations_account
+# Ansible Module: aws_manage_account
 
-[![CI/CD Pipeline](https://github.com/laurobmb/ansible-collection-aws/actions/workflows/ci.yml/badge.svg)](https://github.com/laurobmb/ansible-collection-aws/actions/workflows/ci.yml)
-[![Ansible Galaxy](https://img.shields.io/badge/Ansible%20Galaxy-laurobmb.aws-blue.svg)](https://galaxy.ansible.com/laurobmb/aws)
+[](https://github.com/laurobmb/ansible-collection-aws/actions/workflows/ci.yml)
+[](https://galaxy.ansible.com/laurobmb/aws)
 
-Um módulo Ansible para gerenciar de forma declarativa **contas AWS** dentro de uma **AWS Organization**. Este módulo permite criar novas contas e mover contas existentes entre **Organizational Units (OUs)** de forma segura e idempotente.
+An Ansible module to declaratively manage **AWS accounts** within an **AWS Organization**. This module allows you to create new accounts and move existing accounts between **Organizational Units (OUs)** safely and idempotently.
 
----
+-----
 
-## Visão Geral
+## Overview
 
-Este módulo foi projetado para automatizar duas operações críticas em AWS Organizations:
+This module is designed to automate two critical operations in AWS Organizations:
 
-- **Criação de Contas**: Cria uma nova conta AWS de forma assíncrona, aguardando a sua conclusão antes de prosseguir. O módulo faz o *polling* do status da criação até que ela seja bem-sucedida ou falhe.
-- **Movimentação de Contas**: Move uma conta existente de sua localização atual (Root ou outra OU) para uma OU de destino. A lógica é idempotente: se a conta já estiver no destino, nenhuma ação é executada.
+  - **Account Creation**: Creates a new AWS account asynchronously, waiting for its completion before proceeding. The module polls the creation status until it succeeds or fails. It also supports applying resource tags and specifying a custom IAM role name upon creation.
+  - **Account Moving**: Moves an existing account from its current location (Root or another OU) to a destination OU. The logic is idempotent: if the account is already at the destination, no action is taken.
 
-Ele é ideal para ambientes que necessitam de provisionamento e organização de contas em escala, integrado a pipelines de CI/CD e playbooks de automação.
+It is ideal for environments that require account provisioning and organization at scale, integrated into CI/CD pipelines and automation playbooks.
 
----
+-----
 
-## Requisitos
+## Requirements
 
-- Python >= 3.7
-- Ansible Core >= 2.12
-- Boto3 >= 1.26
-- Credenciais AWS configuradas (via `~/.aws/credentials`, variáveis de ambiente ou roles IAM).
+  - Python \>= 3.7
+  - Ansible Core \>= 2.12
+  - Boto3 \>= 1.26
+  - AWS credentials configured (via `~/.aws/credentials`, environment variables, or IAM roles).
 
-**Permissões IAM Mínimas Necessárias:**
+**Minimum Required IAM Permissions:**
 
-A entidade (usuário ou role) que executa o playbook precisa das seguintes permissões na conta de gerenciamento da Organization:
+The entity (user or role) executing the playbook needs the following permissions in the Organization's management account:
 
 ```json
 {
@@ -39,19 +39,22 @@ A entidade (usuário ou role) que executa o playbook precisa das seguintes permi
                 "organizations:CreateAccount",
                 "organizations:DescribeCreateAccountStatus",
                 "organizations:MoveAccount",
-                "organizations:ListParents"
+                "organizations:ListParents",
+                "organizations:TagResource"
             ],
             "Resource": "*"
         }
     ]
 }
-````
+```
+
+> **Note**: The `organizations:TagResource` permission is required to use the `account_tags` parameter.
 
 -----
 
-## Instalação
+## Installation
 
-A forma recomendada de usar este módulo é através de uma **Ansible Collection**. Salve o código do módulo no seguinte caminho de diretório relativo ao seu projeto:
+The recommended way to use this module is as part of an **Ansible Collection**. Save the module's code in the following directory path relative to your project:
 
 ```text
 ansible_collections/
@@ -62,103 +65,137 @@ ansible_collections/
                 └── aws_organizations_account.py
 ```
 
-Com essa estrutura, o Ansible encontrará o módulo automaticamente ao chamá-lo por seu nome completo: `laurobmb.aws.aws_organizations_account`.
+With this structure, Ansible will automatically find the module when you call it by its Fully Qualified Collection Name (FQCN): `laurobmb.aws.aws_organizations_account`.
 
 -----
 
-## Parâmetros do Módulo
+## Module Parameters
 
-| Parâmetro | Tipo | Obrigatório | Descrição |
-| --- | --- | --- | --- |
-| `action` | `str` | **Sim** | Ação a ser executada: `create_account` ou `move_account`. |
-| `email` | `str` | Condicional | Email para a nova conta. **Obrigatório para `action: create_account`**. |
-| `projeto` | `str` | Condicional | Nome do projeto ou nome da conta a ser criada. **Obrigatório para `action: create_account`**. |
-| `account_id` | `str` | Condicional | ID da conta AWS a ser movida (ex: `123456789012`). **Obrigatório para `action: move_account`**. |
-| `destination_ou_id` | `str` | Condicional | ID da Organizational Unit de destino (ex: `ou-xxxx-yyyyyyyy`). **Obrigatório para `action: move_account`**. |
+| Parameter           | Type   | Required    | Description                                                                                             |
+| ------------------- | ------ | ----------- | ------------------------------------------------------------------------------------------------------- |
+| `action`            | `str`  | **Yes** | The action to perform: `create_account` or `move_account`.                                              |
+| `email`             | `str`  | Conditional | Email for the new account. **Required for `action: create_account`**.                                     |
+| `projeto`           | `str`  | Conditional | The project name or account name to be created. **Required for `action: create_account`**.              |
+| `role_name`         | `str`  | No          | The name of the IAM role to be created by default in the new account (e.g., 'OrganizationAccountAccessRole'). |
+| `account_tags`      | `list` | No          | A list of tags to apply to the new account. Each item should be a dictionary with `Key` and `Value`.      |
+| `account_id`        | `str`  | Conditional | ID of the AWS account to be moved (e.g., `123456789012`). **Required for `action: move_account`**.       |
+| `destination_ou_id` | `str`  | Conditional | ID of the destination Organizational Unit (e.g., `ou-xxxx-yyyyyyyy`). **Required for `action: move_account`**. |
 
 -----
 
-## Exemplos de Playbooks
+## Playbook Examples
 
-### Cenário 1: Criar uma nova conta AWS
+### Scenario 1: Create a new AWS account
 
-Este playbook cria uma nova conta e aguarda até que o processo seja concluído.
+This playbook creates a new account and waits until the process is complete.
 
 ```yaml
 ---
-- name: Criar uma Nova Conta na AWS Organization
+- name: Create a New Account in AWS Organization
   hosts: localhost
   connection: local
   gather_facts: false
 
   vars:
-    nova_conta_email: "novo.projeto.gamma@example.com"
-    nova_conta_nome: "ProjetoGamma"
+    new_account_email: "new.project.gamma@example.com"
+    new_account_name: "ProjectGamma"
 
   tasks:
-    - name: "CRIAR: Nova conta para o {{ nova_conta_nome }}"
+    - name: "CREATE: New account for {{ new_account_name }}"
       laurobmb.aws.aws_organizations_account:
         action: create_account
-        email: "{{ nova_conta_email }}"
-        projeto: "{{ nova_conta_nome }}"
-      register: resultado_criacao
+        email: "{{ new_account_email }}"
+        projeto: "{{ new_account_name }}"
+      register: creation_result
 
-    - name: "DEBUG: Exibir o status da criação da conta"
+    - name: "DEBUG: Display the account creation status"
       ansible.builtin.debug:
-        var: resultado_criacao.status
-      when: resultado_criacao.changed
+        var: creation_result.status
+      when: creation_result.changed
 ```
 
-### Cenário 2: Mover uma conta existente para uma OU
+### Scenario 2: Create a new account with a custom role and tags
 
-Este playbook move uma conta para a OU de "Projetos". Se a conta já estiver lá, nenhuma alteração será feita.
+This example demonstrates creating an account with all the advanced options.
 
 ```yaml
 ---
-- name: Organizar Conta AWS em uma OU
+- name: Create a New Tagged Account in AWS Organization
   hosts: localhost
   connection: local
   gather_facts: false
 
   vars:
-    id_conta_alvo: "123456789012"
-    ou_projetos_id: "ou-xxxx-yyyyyyyy"
+    account_email: "new.project.delta@example.com"
+    account_name: "ProjectDelta"
+    custom_role: "CustomOrgAccessRole"
+    account_tags_list:
+      - Key: Environment
+        Value: "production"
+      - Key: Project
+        Value: "{{ account_name }}"
 
   tasks:
-    - name: "MOVER: Conta {{ id_conta_alvo }} para a OU de Projetos"
+    - name: "CREATE: New tagged account for {{ account_name }}"
+      laurobmb.aws.aws_organizations_account:
+        action: create_account
+        email: "{{ account_email }}"
+        projeto: "{{ account_name }}"
+        role_name: "{{ custom_role }}"
+        account_tags: "{{ account_tags_list }}"
+      register: creation_result
+```
+
+### Scenario 3: Move an existing account to an OU
+
+This playbook moves an account to the "Projects" OU. If the account is already there, no changes will be made.
+
+```yaml
+---
+- name: Organize an AWS Account into an OU
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    target_account_id: "123456789012"
+    projects_ou_id: "ou-xxxx-yyyyyyyy"
+
+  tasks:
+    - name: "MOVE: Account {{ target_account_id }} to the Projects OU"
       laurobmb.aws.aws_organizations_account:
         action: move_account
-        account_id: "{{ id_conta_alvo }}"
-        destination_ou_id: "{{ ou_projetos_id }}"
-      register: resultado_movimentacao
+        account_id: "{{ target_account_id }}"
+        destination_ou_id: "{{ projects_ou_id }}"
+      register: move_result
 
-    - name: "DEBUG: Exibir resultado da movimentação"
+    - name: "DEBUG: Display the move result"
       ansible.builtin.debug:
-        var: resultado_movimentacao
+        var: move_result
 ```
 
 -----
 
-## Valores de Retorno
+## Return Values
 
-O módulo retorna um dicionário JSON com uma estrutura padronizada.
+The module returns a standard JSON dictionary.
 
-| Chave | Tipo | Descrição | Retornado |
-| --- | --- | --- | --- |
-| `changed` | `bool` | `true` se uma alteração foi feita, `false` caso contrário. | Sempre |
-| `msg` | `str` | Mensagem resumida descrevendo o resultado da operação. | Sempre |
-| `status` | `dict` | Dicionário com a resposta da API `describe_create_account_status`. | Apenas para `action: create_account` |
-| `response` | `dict` | Dicionário com a resposta da API `move_account`. | Apenas para `action: move_account` |
+| Key        | Type   | Description                                                           | Returned                          |
+| ---------- | ------ | --------------------------------------------------------------------- | --------------------------------- |
+| `changed`  | `bool` | `true` if a change was made, `false` otherwise.                       | Always                            |
+| `msg`      | `str`  | A summary message describing the result of the operation.             | Always                            |
+| `status`   | `dict` | Dictionary with the `describe_create_account_status` API response.    | Only for `action: create_account` |
+| `response` | `dict` | Dictionary with the `move_account` API response.                      | Only for `action: move_account`   |
 
-#### Exemplo de Retorno (Criação de Conta)
+#### Return Example (Account Creation)
 
 ```json
 {
     "changed": true,
-    "msg": "Conta 987654321098 criada com sucesso para o projeto ProjetoGamma.",
+    "msg": "Account 987654321098 successfully created for project ProjectGamma.",
     "status": {
         "AccountId": "987654321098",
-        "AccountName": "ProjetoGamma",
+        "AccountName": "ProjectGamma",
         "Id": "car-example12345",
         "State": "SUCCEEDED",
         "RequestedTimestamp": "2025-09-01T18:30:00.123Z",
@@ -167,12 +204,12 @@ O módulo retorna um dicionário JSON com uma estrutura padronizada.
 }
 ```
 
-#### Exemplo de Retorno (Movimentação de Conta bem-sucedida)
+#### Return Example (Successful Account Move)
 
 ```json
 {
     "changed": true,
-    "msg": "Conta 123456789012 movida de r-abcd para ou-xxxx-yyyyyyyy.",
+    "msg": "Account 123456789012 moved from r-abcd to ou-xxxx-yyyyyyyy.",
     "response": {
         "ResponseMetadata": {
             "RequestId": "a1b2c3d4-example",
@@ -182,39 +219,39 @@ O módulo retorna um dicionário JSON com uma estrutura padronizada.
 }
 ```
 
-#### Exemplo de Retorno (Conta já no destino)
+#### Return Example (Account already at destination)
 
 ```json
 {
     "changed": false,
-    "msg": "Conta 123456789012 já está na OU de destino ou-xxxx-yyyyyyyy."
+    "msg": "Account 123456789012 is already in the destination OU ou-xxxx-yyyyyyyy."
 }
 ```
 
 -----
 
-## Como Funciona
+## How It Works
 
-1.  **Criação de Conta (`create_account`)**
+1.  **Account Creation (`create_account`)**
 
-      - Invoca a função `create_account` da API da AWS, que inicia o processo de forma assíncrona.
-      - O módulo entra em um loop de *polling*, chamando `describe_create_account_status` a cada 15 segundos para verificar o status da criação.
-      - O controle só é retornado ao playbook quando o status da criação é `SUCCEEDED` ou `FAILED`, garantindo que tarefas subsequentes possam usar o ID da conta recém-criada.
+      - Invokes the `create_account` function of the AWS API, which starts the process asynchronously.
+      - The module enters a polling loop, calling `describe_create_account_status` every 15 seconds to check the creation status.
+      - Control is returned to the playbook only when the creation status is `SUCCEEDED` or `FAILED`, ensuring that subsequent tasks can reliably use the ID of the newly created account.
 
-2.  **Movimentação de Conta (`move_account`)**
+2.  **Account Moving (`move_account`)**
 
-      - Primeiro, utiliza `list_parents` para descobrir a localização atual da conta (seu `SourceParentId`).
-      - Compara a origem com o destino. Se forem iguais, o módulo retorna `changed: false`.
-      - Se forem diferentes, ele invoca `move_account` com a origem descoberta e o destino fornecido. Esta abordagem garante que a movimentação seja idempotente e funcione independentemente de onde a conta esteja na hierarquia da organização.
+      - First, it uses `list_parents` to discover the account's current location (its `SourceParentId`).
+      - It compares the source with the destination. If they are the same, the module returns `changed: false`.
+      - If they are different, it invokes `move_account` with the discovered source and the provided destination. This approach ensures that the move is idempotent and works regardless of where the account is in the organization's hierarchy.
 
 -----
 
-## Autor
+## Author
 
   - Lauro Gomes ([@laurobmb](https://github.com/laurobmb))
 
 -----
 
-## Licença
+## License
 
-MIT
+GPL-3.0-or-later

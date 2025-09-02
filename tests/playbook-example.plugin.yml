@@ -5,16 +5,34 @@
   gather_facts: false
 
   vars:
-    project: "ProjetoDemo3"
-    email: "lauroinf+demo3@hotmail.com"
+    project: "ProjetoDemo4"
+    email: "lauroinf+demo4@hotmail.com"
     destination_ou_id: "ou-jojo-zeg98nd3"
 
+    # 📝 NOVAS VARIÁVEIS ADICIONADAS
+    # Nome do role customizado a ser criado na conta.
+    # Se não quiser customizar, você pode remover essa linha e o parâmetro da task.
+    role_name_custom: "OrganizationAccountAccessRole"
+
+    # Lista de tags a serem aplicadas na conta.
+    # Note o formato: é uma lista de dicionários com 'Key' e 'Value'.
+    tags_da_conta:
+      - Key: Project
+        Value: "{{ project }}" # Boa prática: reutilizando a variável do projeto
+      - Key: Environment
+        Value: "development"
+      - Key: AutomationTool
+        Value: "Ansible"
+
   tasks:
-    - name: Criar nova conta AWS
+    # 🚀 TASK ATUALIZADA COM OS NOVOS PARÂMETROS
+    - name: Criar nova conta AWS com Role e Tags
       laurobmb.aws.aws_manage_account:
         action: create_account
         email: "{{ email }}"
         projeto: "{{ project }}"
+        role_name: "{{ role_name_custom }}"
+        account_tags: "{{ tags_da_conta }}"
       register: create_account_result
 
     - name: Mostrar o resultado completo da criação

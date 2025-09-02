@@ -2,42 +2,53 @@
 
 from ansible.module_utils.basic import AnsibleModule
 import boto3
-import time # CORREÇÃO: Importar o módulo time
+import time
 from botocore.exceptions import ClientError
 
 
 DOCUMENTATION = r'''
 ---
 module: aws_organizations_account
-short_description: Cria ou move contas AWS dentro de uma Organization
+short_description: Creates or moves AWS accounts within an Organization
 version_added: "1.0"
 description:
-  - "Módulo para criar contas AWS em uma Organization e mover contas existentes para Organizational Units (OUs)."
+  - "Module to create AWS accounts in an Organization and move existing accounts to Organizational Units (OUs)."
 options:
     action:
         description:
-          - Ação a ser executada: criar ou mover uma conta.
+          - Action to be performed: create or move an account.
         required: true
         type: str
         choices: ['create_account', 'move_account']
     email:
         description:
-          - Email da conta a ser criada. Obrigatório para create_account.
+          - Email for the account to be created. Required for create_account.
         required: false
         type: str
-    projeto:
+    account_name:
         description:
-          - Nome do projeto / nome da conta a ser criada. Obrigatório para create_account.
+          - Name of the account to be created. Required for create_account.
         required: false
         type: str
+    role_name:
+        description:
+          - Name of the IAM role to be created by default in the new account (e.g., 'OrganizationAccountAccessRole').
+        required: false
+        type: str
+    account_tags:
+        description:
+          - A list of tags (key/value) to apply to the new account.
+        required: false
+        type: list
+        elements: dict
     account_id:
         description:
-          - ID da conta a ser movida. Obrigatório para move_account.
+          - ID of the account to be moved. Required for move_account.
         required: false
         type: str
     destination_ou_id:
         description:
-          - ID da OU de destino. Obrigatório para move_account.
+          - ID of the destination OU. Required for move_account.
         required: false
         type: str
 author:
@@ -45,42 +56,49 @@ author:
 '''
 
 EXAMPLES = r'''
-
-- name: Criar nova conta AWS
-    laurobmb.aws.aws_manage_account:
+- name: Create new AWS account (simple)
+  laurobmb.aws.aws_organizations_account:
     action: create_account
-    email: "laurobmb+demo3@hotmail.com"
-    projeto: "ProjetoDemo3"
-    register: create_account_result
+    email: "laurobmb+demo@hotmail.com"
+    account_name: "DemoProject"
+  register: create_account_result
 
-- name: Mostrar o resultado completo da criação
-    ansible.builtin.debug:
-    var: create_account_result
+- name: Create new AWS account with custom Role and Tags
+  laurobmb.aws.aws_organizations_account:
+    action: create_account
+    email: "laurobmb+demotags@hotmail.com"
+    account_name: "DemoProjectWithTags"
+    role_name: "CustomOrganizationRole"
+    account_tags:
+      - Key: Environment
+        Value: Production
+      - Key: BilledTo
+        Value: "Dept-123"
+  register: create_account_custom_result
 
-- name: Mover a conta recém-criada para a OU de destino
-    laurobmb.aws.aws_manage_account:
+- name: Move the newly created account to the destination OU
+  laurobmb.aws.aws_organizations_account:
     action: move_account
     account_id: "{{ create_account_result.status.AccountId }}"
     destination_ou_id: "ou-jojo-zeg98nd3"
-    when: create_account_result.changed
-
+  when: create_account_result.changed
 '''
 
 RETURN = r'''
 msg:
-    description: Mensagem resumida da ação executada
+    description: Summary message of the action performed
     type: str
     returned: always
 changed:
-    description: Indica se houve alteração no ambiente
+    description: Indicates if a change was made to the environment
     type: bool
     returned: always
 status:
-    description: Status detalhado da criação da conta (apenas para create_account)
+    description: Detailed status of the account creation (only for create_account)
     type: dict
     returned: when action is create_account
 response:
-    description: Resposta da API AWS (apenas para move_account)
+    description: Response from the AWS API (only for move_account)
     type: dict
     returned: when action is move_account
 '''
@@ -95,10 +113,8 @@ def get_current_parent_id(client, account_id):
 def move_account(client, account_id, destination_ou_id):
     """Move uma conta para uma nova OU."""
     try:
-        # CORREÇÃO: Descobrir o pai de origem dinamicamente
         source_parent_id = get_current_parent_id(client, account_id)
         
-        # Não fazer nada se já estiver no destino
         if source_parent_id == destination_ou_id:
             return dict(
                 changed=False,
@@ -122,15 +138,23 @@ def move_account(client, account_id, destination_ou_id):
         )
 
 
-def create_account(client, email, projeto):
-    """Cria uma nova conta na AWS Organization e aguarda sua conclusão."""
+def create_account(client, email, projeto, role_name=None, tags=None):
+    """
+    Cria uma nova conta na AWS Organization, com suporte opcional para RoleName e Tags,
+    e aguarda sua conclusão.
+    """
     try:
-        response = client.create_account(
-            Email=email,
-            AccountName=projeto,
-            IamUserAccessToBilling='ALLOW'
-        )
+        params = {
+            'Email': email,
+            'AccountName': projeto,
+            'IamUserAccessToBilling': 'ALLOW'
+        }
+        if role_name:
+            params['RoleName'] = role_name
+        if tags:
+            params['Tags'] = tags
 
+        response = client.create_account(**params)
         request_id = response['CreateAccountStatus']['Id']
 
         while True:
@@ -141,7 +165,6 @@ def create_account(client, email, projeto):
             state = status['State']
 
             if state == 'SUCCEEDED':
-                # CORREÇÃO: Retornar um dicionário Python formatado para o Ansible
                 return dict(
                     changed=True,
                     msg=f"Conta {status['AccountId']} criada com sucesso para o projeto {projeto}.",
@@ -149,13 +172,12 @@ def create_account(client, email, projeto):
                 )
 
             if state == 'FAILED':
-                # CORREÇÃO: Retornar um dicionário de falha
                 return dict(
                     failed=True,
                     msg=f"Criação da conta falhou. Motivo: {status.get('FailureReason', 'Não especificado')}"
                 )
             
-            time.sleep(15) # Pausa antes da próxima verificação
+            time.sleep(15)
 
     except ClientError as e:
         return dict(
@@ -165,40 +187,48 @@ def create_account(client, email, projeto):
 
 
 def run_module():
+    # 🔧 1. DEFINIÇÃO DE PARÂMETROS ATUALIZADA
     module_args = dict(
         action=dict(type='str', required=True, choices=['create_account', 'move_account']),
         email=dict(type='str', required=False),
         projeto=dict(type='str', required=False),
+        role_name=dict(type='str', required=False),
+        account_tags=dict(type='list', elements='dict', required=False), # Nome amigável para o playbook
         account_id=dict(type='str', required=False),
         destination_ou_id=dict(type='str', required=False),
     )
 
     module = AnsibleModule(
         argument_spec=module_args,
-        supports_check_mode=False # Este módulo faz alterações reais, então check_mode não é suportado
+        supports_check_mode=False
     )
 
     action = module.params['action']
     result = {}
 
-    # MELHORIA: Criar o cliente uma vez e passá-lo como parâmetro
     try:
         client = boto3.client('organizations')
     except Exception as e:
         module.fail_json(msg=f"Falha ao iniciar cliente boto3: {str(e)}")
 
-
     if action == 'create_account':
         if not module.params['email'] or not module.params['projeto']:
             module.fail_json(msg="Parâmetros 'email' e 'projeto' são obrigatórios para create_account.")
-        result = create_account(client, module.params['email'], module.params['projeto'])
+        
+        # 🚀 2. PASSANDO OS NOVOS PARÂMETROS PARA A FUNÇÃO
+        result = create_account(
+            client=client,
+            email=module.params['email'],
+            projeto=module.params['projeto'],
+            role_name=module.params['role_name'],
+            tags=module.params['account_tags'] # Passando 'account_tags' para o parâmetro 'tags' da função
+        )
 
     elif action == 'move_account':
         if not module.params['account_id'] or not module.params['destination_ou_id']:
             module.fail_json(msg="Parâmetros 'account_id' e 'destination_ou_id' são obrigatórios para move_account.")
         result = move_account(client, module.params['account_id'], module.params['destination_ou_id'])
 
-    # Lógica de saída final
     if result.get("failed"):
         module.fail_json(**result)
     else:
