@@ -1,12 +1,13 @@
 namespace: laurobmb
 name: aws
-version: 1.0.6
+version: 1.0.7
 readme: README.md
 authors:
 - Lauro Gomes <lagomes@redhat.com>
-description: Modulo para criar contas na aws
+- Lauro Gomes <laurobmb@gmail.com>
+description: This Ansible module automates the creation of new AWS accounts and the movement of existing accounts between Organizational Units (OUs). It operates declaratively and idempotently, waiting for processes to complete to ensure the accounts are in the desired state.
 license:
-- GPL-2.0-or-later
+- GPL-3.0-or-later
 license_file: ''
 tags: []
 dependencies: {}

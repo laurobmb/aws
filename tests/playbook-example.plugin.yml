@@ -2,15 +2,19 @@
 - name: AWS Account Management
   hosts: localhost
   connection: local
-  gather_facts: no # Não precisa coletar fatos para este tipo de tarefa
+  gather_facts: false
+
+  vars:
+    project: "ProjetoDemo3"
+    email: "lauroinf+demo3@hotmail.com"
+    destination_ou_id: "ou-jojo-zeg98nd3"
 
   tasks:
     - name: Criar nova conta AWS
-      # Supondo que o módulo está na coleção laurobmb.aws e se chama aws_organizations_account
       laurobmb.aws.aws_manage_account:
         action: create_account
-        email: "lauroinf+demo3@hotmail.com" # É bom usar um e-mail único por conta
-        projeto: "ProjetoDemo3"
+        email: "{{ email }}"
+        projeto: "{{ project }}"
       register: create_account_result
 
     - name: Mostrar o resultado completo da criação
@@ -20,7 +24,6 @@
     - name: Mover a conta recém-criada para a OU de destino
       laurobmb.aws.aws_manage_account:
         action: move_account
-        # CORREÇÃO AQUI: Acessando o AccountId dentro da chave 'status'
         account_id: "{{ create_account_result.status.AccountId }}"
-        destination_ou_id: "ou-jojo-zeg98nd3" # Coloque o ID da sua OU aqui
-      when: create_account_result.changed # Só executa se a conta foi realmente criada
+        destination_ou_id: "{{ destination_ou_id }}"
+      when: create_account_result.changed
