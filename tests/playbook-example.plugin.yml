@@ -3,36 +3,29 @@
   hosts: localhost
   connection: local
   gather_facts: false
-
   vars:
-    project: "ProjetoDemo4"
-    email: "lauroinf+demo4@hotmail.com"
-    destination_ou_id: "ou-jojo-zeg98nd3"
+    project: "AppProject"
+    email: "lauroinf5@hotmail.com"
+    destination_ou_id: "ou-8rpp-cm4auzsq"
 
-    # 📝 NOVAS VARIÁVEIS ADICIONADAS
-    # Nome do role customizado a ser criado na conta.
-    # Se não quiser customizar, você pode remover essa linha e o parâmetro da task.
     role_name_custom: "OrganizationAccountAccessRole"
 
-    # Lista de tags a serem aplicadas na conta.
-    # Note o formato: é uma lista de dicionários com 'Key' e 'Value'.
     tags_da_conta:
       - Key: Project
-        Value: "{{ project }}" # Boa prática: reutilizando a variável do projeto
+        Value: "{{ project }}"
       - Key: Environment
         Value: "development"
       - Key: AutomationTool
         Value: "Ansible"
 
   tasks:
-    # 🚀 TASK ATUALIZADA COM OS NOVOS PARÂMETROS
     - name: Criar nova conta AWS com Role e Tags
-      laurobmb.aws.aws_manage_account:
+      laurobmb.aws.organization_account:
         action: create_account
         email: "{{ email }}"
-        projeto: "{{ project }}"
-        role_name: "{{ role_name_custom }}"
-        account_tags: "{{ tags_da_conta }}"
+        name: "{{ project }}"
+        admin_role_name: "{{ role_name_custom }}"
+        tags: "{{ tags_da_conta }}"
       register: create_account_result
 
     - name: Mostrar o resultado completo da criação
@@ -40,8 +33,8 @@
         var: create_account_result
 
     - name: Mover a conta recém-criada para a OU de destino
-      laurobmb.aws.aws_manage_account:
+      laurobmb.aws.organization_account:
         action: move_account
-        account_id: "{{ create_account_result.status.AccountId }}"
-        destination_ou_id: "{{ destination_ou_id }}"
+        id: "{{ create_account_result.status.AccountId }}"
+        ou_id: "{{ destination_ou_id }}"
       when: create_account_result.changed
